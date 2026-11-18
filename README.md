@@ -74,6 +74,13 @@ The intent classifier predicts dialogue intent.
 Price-limit validation and negotiation decisions are
 handled separately by rule-based agent logic.
 
+<<<<<<< HEAD
+### Future Integration
+
+The trained classifier will be integrated into the
+Negotiation Analyst Agent and connected to the
+Buyer, Seller and Mediator Agents.
+=======
 ### Integration Status
 
 The trained classifier is integrated into the Negotiation Analyst Agent. The Mediator, Analyst, Risk Analyzer and Gen AI response generator are connected through the negotiation support coordinator.
@@ -139,3 +146,4 @@ The integration coordinator connects Member 3's support modules. The automated B
 ### Updated Integration Status
 
 The trained intent classifier is integrated into the Negotiation Analyst Agent. The Mediator, Analyst, Risk Analyzer and Gen AI response generator are connected through the negotiation support coordinator.
+>>>>>>> 9d24adc6876cbad571ff45181f96e6262ab7fa09
