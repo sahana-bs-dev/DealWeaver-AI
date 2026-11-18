@@ -178,6 +178,43 @@ class NegotiationEngine:
             "round": (len(self.history) + 1) // 2
         }
 
+    def accept_current_offer(self, role):
+        """Human accept: accept the other party's latest priced offer."""
+
+        if self.status != "active":
+            raise RuntimeError("Negotiation is not active.")
+
+        if self.current_speaker != role:
+            raise RuntimeError("It is not your turn.")
+
+        other = "Seller" if role == "Buyer" else "Buyer"
+
+        offers = [
+            float(item["price"])
+            for item in self.get_history()
+            if item["speaker"] == other and item["price"] is not None
+        ]
+
+        if not offers:
+            raise ValueError("There is no offer to accept.")
+
+        price = offers[-1]
+
+        if role == "Buyer" and price > self.buyer_budget:
+            raise ValueError("This offer exceeds your budget.")
+
+        if role == "Seller" and price < self.seller_minimum:
+            raise ValueError("This offer is below your minimum price.")
+
+        self._record(role, "accept", price, f"{role} accepted the offer.")
+
+        return {
+            "action": "accept",
+            "price": price,
+            "reason": f"{role} accepted the offer.",
+            "round": (len(self.history) + 1) // 2
+        }
+
     def buyer_respond(self, action, price=None):
 
         if self.status != "active":

@@ -641,7 +641,13 @@ elif page == "Live Negotiation":
             with col_risk:
                 render_risk_panel(data)
 
-            engine = NegotiationEngine(neg_id)
+            try:
+                engine = NegotiationEngine(neg_id)
+            except ValueError as e:
+                if "overlap" in str(e):
+                    update_negotiation_status(neg_id, "no_deal")
+                st.error(f"⚠️ This negotiation cannot continue: {e}")
+                return
             st.markdown("---")
             st.subheader("Negotiation History")
             history = get_offer_history(neg_id)
@@ -662,8 +668,8 @@ elif page == "Live Negotiation":
                     engine.start()
                     st.rerun()
 
-            elif engine.status in ["accepted", "no_deal"]:
-                if engine.status == "accepted":
+            elif engine.status in ["accepted", "completed", "no_deal"]:
+                if engine.status in ["accepted", "completed"]:
                     if data.get("status") != "completed":
                         conn = get_connection()
                         conn.execute("UPDATE negotiations SET status = 'completed' WHERE id = ?", (neg_id,))
@@ -683,19 +689,16 @@ elif page == "Live Negotiation":
                     
                     with col_act1:
                         if st.button("✅ Accept Offer", type="primary", key=f"{user_role}_accept_btn"):
+                            accept_error = None
                             try:
-                                # Force direct database completion and log the acceptance
-                                conn = get_connection()
-                                conn.execute("UPDATE negotiations SET status = 'completed' WHERE id = ?", (neg_id,))
-                                conn.commit()
-                                conn.close()
-                                
-                                # Log acceptance to offer history
-                                from core.shared_storage import log_offer_history
-                                log_offer_history(neg_id, speaker=user_role, action="accept", price=None, reason="Deal accepted by user.")
-                            except Exception as e:
-                                st.error(f"Error accepting deal: {e}")
-                            st.rerun()
+                                engine.accept_current_offer(user_role)
+                            except (ValueError, RuntimeError) as e:
+                                accept_error = str(e)
+
+                            if accept_error:
+                                st.toast(f"⚠️ {accept_error}")
+                            else:
+                                st.rerun()
 
                     with col_act2:
                         if st.button("❌ Reject", key=f"{user_role}_reject_btn"):
@@ -729,11 +732,15 @@ elif page == "Live Negotiation":
                     counter_price = st.number_input("Enter counteroffer amount (₹)", min_value=1.0, step=100.0, key=f"{user_role}_counter_price_input")
 
                     if st.button("Submit Counteroffer", key=f"{user_role}_submit_counter"):
-                        if user_role == "Buyer":
-                            engine.buyer_respond("offer", counter_price)
+                        try:
+                            if user_role == "Buyer":
+                                engine.buyer_respond("offer", counter_price)
+                            else:
+                                engine.seller_respond("offer", counter_price)
+                        except (ValueError, RuntimeError) as e:
+                            st.toast(f"⚠️ {e}")
                         else:
-                            engine.seller_respond("offer", counter_price)
-                        st.rerun()
+                            st.rerun()
 
             # --- POST-COMPLETION PAYMENT & FULFILLMENT WORKFLOW ---
             if data.get("status") == "completed":
@@ -991,13 +998,9 @@ elif page == "Final Deal Report":
             st.write(f"Negotiation ID: `{active_id}`")
             st.write(f"**Status:** {data['status'].upper()}")
 
-            if data["status"] == "accepted":
+            if data["status"] in ("accepted", "completed"):
                 accepted_offer = next(
-                    (
-                        item
-                        for item in reversed(history)
-                        if item["action"] == "accept" and item["price"] is not None
-                    ),
+                    (item for item in reversed(history) if item["price"] is not None),
                     None
                 )
 
@@ -1058,7 +1061,7 @@ def render_product_history_dashboard(username: str, role: str):
         return
 
     for rec in history_records:
-        status_color = "🟢" if rec["status"] == "accepted" else ("🔴" if rec["status"] == "no_deal" else "🟡")
+        status_color = "🟢" if rec["status"] in ("accepted", "completed") else ("🔴" if rec["status"] == "no_deal" else "🟡")
         with st.expander(
             f"{status_color} [{rec['id']}] Product: {rec['product']} | "
             f"Qty: {rec['quantity']} | Status: {rec['status'].upper()} | "
